@@ -1,0 +1,179 @@
+---
+title: "misc"
+format: html
+editor: console
+---
+
+```{r, echo=FALSE}
+# libraries
+library(tidyverse)
+```
+
+## Introduction
+
+## Issue
+
+```{r}
+regs <- read_csv(
+  here::here('data/regs.csv'),
+  col_types = cols(
+    areacode = col_character(),
+    area = col_character()
+    )
+  ) %>%
+  mutate(
+    area = str_pad(area, 2, side='left', '0'),
+    across(ends_with('_date'), \(x) as.Date(x, '%m/%d/%Y'))
+  ) %>%
+  janitor::clean_names()
+
+daily_regs <- regs %>%
+  filter(
+    area %in% c('10','11', '09'),
+    fishery_status == 'MSF'
+  ) %>%
+  rowwise() %>%
+  mutate(date = list(seq(reg_start_date, reg_end_date, by='day'))) %>%
+  unnest(date)
+
+# days open
+daily_regs %>%
+  filter(lubridate::month(date) %in% c(7,8,9)) %>%
+  count(area, run_year) %>%
+  ggplot(aes(factor(run_year), n, group=area, color=area)) +
+  geom_line()
+
+```
+
+estimate import
+
+```{r}
+ests <- read_csv(here::here('data/chinook_ests.csv')) %>%
+  janitor::clean_names()
+```
+
+effort
+
+```{r}
+ests %>%
+  inner_join(daily_regs, by=c('area', 'days' = 'date')) %>% # contextualizes to open
+  filter(lubridate::month(days) %in% c(7)) %>%
+  group_by(area, run_year) %>%
+  summarize(anglers = sum(anglers), days_open = n()) %>%
+  ggplot(aes(factor(run_year), anglers / days_open, group=area, color=area)) +
+  geom_smooth(se=F) +
+  labs(
+    x = 'Year',
+    y = 'Angler / Day Open',
+    subtitle = 'Anglers per Day Open to Chinook Retention (Time Step 3 July - Septemper)' 
+  )
+```
+
+catch
+
+```{r}
+ests %>%
+  inner_join(daily_regs, by=c('area', 'days' = 'date')) %>% # contextualizes to open
+  filter(lubridate::month(days) %in% c(7)) %>%
+  group_by(area, run_year) %>%
+  summarize(chin_ad_ret = sum(chin_ad_ret), days_open = n()) %>%
+  filter(area == '10') %>%
+  ggplot(aes(factor(run_year), chin_ad_ret / days_open, group=area, color=area)) +
+  geom_smooth(se=F) +
+  labs(
+    x = 'Year',
+    y = 'Catch / Day Open',
+    subtitle = 'Chinook Catch per Day Open to Chinook Retention (Time Step 3 July - Septemper)' 
+  )
+```
+
+tf legal mark
+
+```{r}
+tf <- pssp::tf_pull('10', '2003-01-01', '2023-10-01')
+
+tf %>%
+  inner_join(daily_regs, by=c('catch_area_code' = 'area', 'survey_datetime' = 'date')) %>%
+  filter(lubridate::month(survey_datetime) %in% c(7,8,9)) %>%
+  group_by(catch_area_code, run_year) %>%
+  nest() %>%
+  mutate(
+    tf = map(data, pssp::tf_lm_summary)
+  ) %>%
+  unnest(tf) %>%
+  mutate(
+    across(Legal_AD:Sublegal_UM, \(x) x / (Legal_AD + Legal_UM + Sublegal_AD + Sublegal_UM))
+  ) %>%
+  pivot_longer(Legal_AD:Sublegal_UM) %>%
+  filter(name == 'Legal_AD')  %>%
+  ggplot(aes(factor(run_year), value, group=name, color=name)) +
+  geom_smooth(se=F)
+
+
+
+
+```
+
+weekly test fishing
+
+```{r}
+tf <- pssp::tf_pull('10', '2003-01-01', '2023-10-01')
+
+a<-tf %>%
+  inner_join(daily_regs, by=c('catch_area_code' = 'area', 'survey_datetime' = 'date')) %>%
+  filter(lubridate::month(survey_datetime) %in% c(7,8,9)) %>%
+  group_by(catch_area_code, run_year, survey_datetime) %>%
+  nest() %>%
+  mutate(
+    tf = map(data, pssp::tf_lm_summary)
+  ) %>%
+  unnest(tf) %>%
+  group_by(catch_area_code, run_year) %>%
+  mutate(
+    across(everything(), \(x) replace_na(x, 0)),
+    across(Legal_AD:Sublegal_UM, \(x) x / (Legal_AD + Legal_UM + Sublegal_AD + Sublegal_UM)),
+    mean = zoo::rollmean(Legal_AD,3, fill=NA, align = 'right'),
+    disply_year = lubridate::`year<-`(survey_datetime, 2023)
+  )
+
+
+
+pssp::ds_historical_cpue_chart('10', '2020-07-16', '2020-08-31')
+
+a %>%
+  ggplot(aes(disply_year, mean)) +
+  geom_line() +
+  facet_wrap(~run_year)
+#   
+# 
+# h
+
+```
+
+```{r}
+ests %>%
+  inner_join(daily_regs, by=c('area', 'days' = 'date')) %>% # contextualizes to open
+  filter(
+    lubridate::month(days) %in% c(7,8,9),
+    area == '10'
+    ) %>%
+  transmute(
+    days,
+    cpue = chin_ad_ret / anglers,
+    disply_year = lubridate::`year<-`(days, 2023)
+  ) %>%
+  group_by(disply_year) %>%
+  summarize(mean = psych::harmonic.mean(cpue, na.rm = T)) %>%
+  ggplot(aes(disply_year, mean, group=1)) +
+  geom_line() +
+  geom_smooth(method = 'gam') +
+  labs(subtitle = 'Mean CPUE Area 10')
+```
+
+```{r}
+fram <- read_csv(here::here('data/fram_lm.csv'))
+
+NULL %||% 2 
+fram %>%
+  filter(fishery_id == 56)
+```

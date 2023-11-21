@@ -1,0 +1,344 @@
+---
+title: "Simulated Area 10 Fisheries"
+author: "Ty Garber"
+format:
+  html:
+    toc: true
+    toc-location: left
+---
+```{r}
+library(tidyverse)
+```
+
+## Simulated Area 10
+
+```{r}
+# import the regulations then explode the date strata,
+# will be used in conjunction with inner_joins()
+# to contextualize estimate, and test fishing data
+
+# import data
+regs <- read_csv(
+  here::here('data/regs.csv'),
+  col_types = cols(
+    areacode = col_character(),
+    area = col_character()
+    )
+  ) %>%
+  mutate(
+    area = str_pad(area, 2, side='left', '0'), # for joining
+    across(ends_with('_date'), \(x) as.Date(x, '%m/%d/%Y')) # ensure guess on 
+    # data type is correct
+  ) %>%
+  janitor::clean_names()
+
+
+# filter to 10 and explode the stratum
+daily_regs_10 <- regs %>%
+  filter(
+    area %in% c('10'),
+    fishery_status == 'MSF',
+    target_species == 'CHIN'
+  ) %>%
+  rowwise() %>%
+  mutate(date = list(seq(reg_start_date, reg_end_date, by='day'))) %>% 
+  unnest(date) # boom
+
+
+
+
+
+```
+
+
+
+```{r wheres_2017}
+# wheres 2017?
+# regs %>%
+#   filter(run_year ==2017,
+#          area == '10')
+# its here
+
+# daily_regs_10%>%
+#   filter(lubridate::year(date) == 2017,
+#          area == '10') %>%
+#   print(n=Inf)
+# and here
+
+# read_csv(here::here('data/chinook_ests.csv')) %>%
+#   janitor::clean_names() %>%
+#   filter(area == '10',
+#          lubridate::month(days) %in% c(7,8,9)) %>%
+#   mutate(year = lubridate::year(days)) %>%
+#   filter(year == 2017)
+# and here
+
+#pssp::tf_pull('10', '2017-07-16', '2017-08-15')
+# and here, but the survey_datetime actually 
+# has a time which is why the join to regs
+# is failing
+
+```
+
+
+```{r, estimates}
+# load daily summer estimates in area 10
+area_10_daily_estimates <- read_csv(here::here('data/chinook_ests.csv')) %>%
+  janitor::clean_names() %>%
+  filter(area == '10',
+         lubridate::month(days) %in% c(7,8,9)) %>%
+  mutate(year = lubridate::year(days)) %>%
+  inner_join(daily_regs_10,
+             by = c('area','days'='date')
+             )
+```
+
+
+```{r, test fishing}
+# load test fishing, want this in daily form with a rolling sum, then
+# convert to proportions to calulate encounter estimates
+
+area_10_test_fishing <- pssp::tf_pull('10', '2007-01-01', '2023-10-01') %>%
+  mutate(across(survey_datetime, as.Date)) %>% # won't pick up 2017 without this, deletes the timestamp
+  inner_join(daily_regs_10,
+             by=c('catch_area_code' = 'area',
+                  'survey_datetime' = 'date')) %>%
+  filter(lubridate::month(survey_datetime) %in% c(7,8,9)) %>%
+  group_by(catch_area_code, run_year, survey_datetime) %>%
+  nest() %>%
+  mutate(
+    tf = map(data, pssp::tf_lm_summary)
+  ) %>%
+  unnest(tf) %>%
+  mutate(across(everything(), \(x) replace_na(x, 0))) %>%
+  ungroup()
+
+
+# running sums then proportions by year
+area_10_test_fishing_est <-area_10_test_fishing %>%
+  arrange(survey_datetime) %>% # important for cumsum
+  group_by(run_year) %>%
+  mutate(
+      across(Legal_AD:Sublegal_UM, \(x) cumsum(x)),
+      across(Legal_AD:Sublegal_UM, \(x) x / (Legal_AD + Legal_UM + Sublegal_AD + Sublegal_UM))
+  )
+
+# taking a peak
+# area_10_test_fishing_est %>%
+#   mutate(
+#     disply_year = lubridate::`year<-`(survey_datetime, 2023),
+#   ) %>%
+#   ggplot(aes(disply_year, Legal_AD, group=factor(run_year), color = factor(run_year))) +
+#   geom_line(se=FALSE) +
+#   facet_wrap(~run_year, scales = 'free_y')
+```
+
+
+```{r, fram}
+# import fram output
+fram_enc <- read_csv(here::here('data/fram_lm_encounters.csv')) %>%
+  filter(fishery_id == 56) # area 10
+fram_landed_catch <- read_csv(here::here('data/fram_landed_catch.csv')) %>%
+  filter(fishery_id == 56) %>% # area 10
+  select(everything(),landed_catch_marked = legal_marked, landed_catch_unmarked = legal_unmarked)
+
+# make into a single dataframe, add some things to manage to
+# turn run_ids to management years
+fram_parameters <- fram_enc %>%
+  inner_join(fram_landed_catch) %>%
+  mutate(
+    total_sublegal = sublegal_marked + sublegal_unmarked,
+    total_unmarked = legal_unmarked + sublegal_unmarked,
+    total_harvest = landed_catch_marked + landed_catch_unmarked,
+    run_year = recode(run_id,
+                      `1` = 2013,
+                      `2` = 2014,
+                      `3` = 2015,
+                      `4` = 2016,
+                      `5` = 2017,
+                      `6` = 2018,
+                      `7` = 2019,
+                      `8` = 2020,
+                      `9` = 2021,
+                      `10` = 2022,
+                      `11` = 2023,
+                      )
+  ) %>%
+  select(run_year, everything(), -run_id, -time_step, -fishery_id, -c(legal_marked:landed_catch_unmarked))
+
+```
+
+
+```{r, run_fisheries}
+
+# pertinent years/fields for estimates, cummsum catch
+ests_prep <- area_10_daily_estimates %>%
+  select(year, date = days, chin_ad_ret, chin_um_ret) %>%
+  filter(year >= 2013) %>%
+  group_by(year) %>%
+  mutate(across(chin_ad_ret:chin_um_ret, \(x) cumsum(x)),
+         est_harvest = chin_ad_ret+chin_um_ret) %>%
+  ungroup() %>%
+  left_join(
+    area_10_test_fishing_est %>%
+      select(survey_datetime, Legal_AD:Sublegal_UM),
+    by = c('date' = 'survey_datetime') # join cumsum test fishing, fill na'
+  ) %>%
+  fill(everything(), .direction = 'down')
+
+# calculate estimates
+ests <- ests_prep %>%
+  mutate(
+    est_total_encounters = chin_ad_ret / Legal_AD / .87,
+    est_legal_ad = est_total_encounters * Legal_AD,
+    est_legal_um = est_total_encounters * Legal_UM,
+    est_sublegal_ad = est_total_encounters * Sublegal_AD,
+    est_sublegal_um = est_total_encounters * Sublegal_UM,
+    total_sublegal_encounters = est_sublegal_ad + est_sublegal_um
+  )
+```
+
+```{r, results}
+
+graphs <- ests %>%
+  inner_join(fram_parameters, by=c('year' = 'run_year')) %>%
+  select(-run_year) %>%
+  pivot_longer(chin_ad_ret:last_col())
+
+# total sublegals
+graphs %>%
+  filter(name %in% c('total_sublegal_encounters', 'total_sublegal')) %>% #View()
+  ggplot(aes(date, value, group=name)) +
+  geom_line() +
+  facet_wrap(~year, scales = 'free') +
+  labs(subtitle = 'Total Sublegal')
+
+# total harvest
+graphs %>%
+  filter(name %in% c('est_harvest', 'total_harvest')) %>% #View()
+  ggplot(aes(date, value, group=name)) +
+  geom_line() +
+  facet_wrap(~year, scales = 'free')+
+  labs(subtitle = 'Total Harvest')
+
+
+```
+
+
+### Identifying LM% FRAM crossover locations, times
+```{r, FRAM_lm}
+fram_proportions <- read_csv(here::here('data/fram_lm.csv')) %>%
+  mutate(
+     run_year = recode(run_id,
+                      `1` = 2013,
+                      `2` = 2014,
+                      `3` = 2015,
+                      `4` = 2016,
+                      `5` = 2017,
+                      `6` = 2018,
+                      `7` = 2019,
+                      `8` = 2020,
+                      `9` = 2021,
+                      `10` = 2022,
+                      `11` = 2023,
+                      )
+  ) %>%
+  select(run_year, legal_marked)
+  
+```
+
+```{r, test_fishing}
+area_10_test_fishing_est %>%
+  select(survey_datetime, run_year, Legal_AD) %>%
+  inner_join(fram_proportions) %>% #View()
+  pivot_longer(Legal_AD:legal_marked) %>%
+  ggplot(aes(survey_datetime, value, group=name)) +
+  geom_line() +
+  facet_wrap(~run_year, scales = 'free')+
+  labs(subtitle = 'LM Converge')
+```
+
+```{r,3_day_lag}
+
+
+lag_days <- 2
+
+area_10_test_fishing %>%
+  group_by(run_year) %>%
+  mutate(
+    lag_LM = reduce(map(0:lag_days, \(x) dplyr::lag(Legal_AD,x, 0)), `+`),
+    lag_LU = reduce(map(0:lag_days, \(x) dplyr::lag(Legal_UM,x, 0)), `+`),
+    lag_SM = reduce(map(0:lag_days, \(x) dplyr::lag(Sublegal_AD,x, 0)), `+`),
+    lag_SU = reduce(map(0:lag_days, \(x) dplyr::lag(Sublegal_UM,x, 0)), `+`),
+    across(starts_with('lag_'), \(x) x / (lag_LM + lag_LU + lag_SM + lag_SU))
+  ) %>%
+  select(survey_datetime, run_year, lag_LM) %>%
+  inner_join(fram_proportions) %>% #View()
+  pivot_longer(lag_LM:legal_marked) %>%
+  ggplot(aes(survey_datetime, value, group=name)) +
+  geom_line() +
+  facet_wrap(~run_year, scales = 'free') +
+  labs(subtitle = 'Lag LM')
+
+```
+
+I think 2021 would be great to recalculate from 8/1
+
+
+```{r}
+final <- area_10_daily_estimates %>%
+  select(year, days, chin_ad_ret, chin_um_ret) %>%
+  filter(year == 2023
+         ,days >= '2023-08-01'
+         ) %>% # recalc lm from here as well
+  summarize(across(chin_ad_ret:chin_um_ret, \(x) sum(x)))
+  
+
+area_10_test_fishing %>%
+  filter(run_year == 2023
+         ,survey_datetime >= '2023-08-01'
+         ) %>%
+  group_by(run_year) %>%
+  summarize(across(Legal_AD:Sublegal_UM, \(x) sum(x))) %>%
+  mutate(across(Legal_AD:Sublegal_UM, \(x) x / (Legal_AD+Legal_UM+Sublegal_AD+Sublegal_UM)))
+
+
+
+  
+total_enc_late <- 1973 / .382 / .87
+total_sublegal <- total_enc_late * (.373+.118)
+total_harvest <- 1973 + 24
+
+total_enc <- 3393 / .226 / .87
+total_harvest_early <- 3393 + 35
+total_sublegal_early <- total_enc * (.454+.159)
+
+
+fram_parameters %>%
+  filter(run_year == 2023) 
+
+early_harvest <- total_harvest_early / 3566
+late_harvest <- total_harvest / 3566
+
+early_sublegals <- total_sublegal_early / 7748
+late_sublegals <- total_sublegal / 7748
+
+
+246 / 3718
+706 / 3718
+
+graphs %>%
+  filter(name %in% c('total_sublegal_encounters', 'total_sublegal')) %>%
+  pivot_wider(names_from = name, values_from = value) %>%
+  filter(year == 2021) %>%
+  print(n=Inf)
+
+graphs %>%
+  filter(name %in% c('est_harvest', 'total_harvest')) %>%
+  pivot_wider(names_from = name, values_from = value) %>%
+  filter(year == 2021) %>%
+  print(n=Inf)
+
+?lubridate::week
+```
+
