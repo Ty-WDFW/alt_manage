@@ -91,18 +91,37 @@ vtr<- read_csv(here::here('data/vtr.csv'))  |>
 
 ## Introduction
 
-### Proposal
+Marine Areas 10 and 11 in the Summer of 2023 short Chinook sport seasons in time step 3 relative previous seasons. These fisheries were not only defined by a lack of time on the water with 28 days out of a total of 50 available in Area 10, and 14 days out a total 92 available in Area 11, but also low harvest and high sub-legal encounters relative to FRAM pre-season predictions.
+
+Marine Areas 10 and 11 in the Summer of 2023 short Chinook sport seasons in time step 3 relative previous seasons. These fisheries were not only defined by a lack of time on the water with 28 days out of a total of 50 available in Area 10, and 14 days out a total 92 available in Area 11, but also low harvest and high sub-legal encounters relative to FRAM pre-season predictions.
+
+Shorter than planned seasons are not unprecedented for Puget Sound Chinook sport fisheries, as all recent intensive monitored Chinook sport fisheries have associated quotas which are managed to and subsequently closed to retention when those quotas are met. Typically in time step 3 (July - September) Areas 10 and 11 have similar opening dates every year: July 16th and July 1st respectively. These dates appear to be before the bulk of the Chinook run returning Puget Sound rivers (See @fig-run-timing).
+
+## Proposal
 
 Due to high catches and coinciding with high observed sub-legal-to-legal ratios early in summer (time-step 3) fisheries, WDFW is proposing publishing different dates than what appear in the the List of Agreed to Fisheries (LOAF). These dates will always be within the LOAF agreed-to dates, and will target the time period of historic greatest angler success - the month of August. WDFW, using its expanded test fishing monitoring program, will then monitor the legal and marked proportion (percentage of keepers encountered) of Chinook from the LOAF agreed-to and open the fishery early to Chinook retention when the observed test fishing legal and marked proportion approaches its Fishery Regulation Assessment Model (FRAM) counterpart.
 
 The goal of this proposal is to reduce sport fishing Chinook releases and their associated mortality, while making Area 10 and Area 11 sport fishing seasons more predictable by reducing variability associated with low legal and marked proportions.
 
-### Issue
+## Issue
 
-#### Run-timing
-Marine Areas 10 and 11 in the Summer of 2023 short Chinook sport seasons in time step 3 relative previous seasons. These fisheries were not only defined by a lack of time on the water with 28 days out of a total of 50 available in Area 10, and 14 days out a total 92 available in Area 11, but also low harvest and high sub-legal encounters relative to FRAM pre-season predictions.
+### Start Dates and Run-timing
 
-Shorter than planned seasons are not unprecedented for Puget Sound Chinook sport fisheries, as all recent intensive monitored Chinook sport fisheries have associated quotas which are managed to and subsequently closed to retention when those quotas are met. Typically in time step 3 (July - September) Areas 10 and 11 have similar opening dates every year: July 16th and July 1st respectively. These dates appear to be before the bulk of the Chinook run returning Puget Sound rivers (See @fig-run-timing).
+Typical start dates for Areas 10 and 11 are mid-July and July 1st respectively (@tbl-start-dates). As measured by mean CPUE (Catch per Unit of Effort) (@fig-run-timing), these dates are weeks to a month before the bulk of the returning adult Chinook run enters the area. The prospective outlook for the time-period from the opener to the bulk of the run returning from the ocean will be largely characterized by the presence and abundance of sub-legal (blackmouth) Chinook. 
+
+```{r start_dates}
+#| label: tbl-start-dates
+#| tbl-cap: 'Start dates of Chinook summer (time-step 3) fisheries in Marine Areas 10 and 11'
+daily_regs |>
+  filter(
+    lubridate::month(date) %in% c(7:9),
+    area %in% c('10', '11')
+    ) |>
+  group_by(run_year, area) |>
+  summarize(opening_date = min(reg_start_date), .groups = 'drop') |>
+  pivot_wider(names_from = area, names_prefix = 'Area_', values_from = opening_date) |>
+  knitr::kable() 
+```
 
 ```{r run_timing}
 #| label: fig-run-timing
@@ -130,7 +149,7 @@ ests %>%
   facet_wrap(~area, ncol = 1, scales = 'free')
 ```
 
-#### Highly Variable Sublegal-to-Legal Ratios
+### Highly Variable Sublegal-to-Legal Ratios
 Sub-legal-to-legal ratios in Puget Sound sport fisheries show a large amount of variability year-to-year.
 Unfortunately there is not much literature explaining the cause of this variability, but it would
 be reasonable to speculate that survival, residency rates and juvenile migration patterns would explain
@@ -209,7 +228,7 @@ sublegal_ratios |>
   
 ```
 
-#### Effort and Efficiency of the Sport Fishers of Areas 10 and 11 in the Month of July
+### Effort and Efficiency of the Sport Fishers of Areas 10 and 11 in the Month of July
 
 Over the last eight summer July seasons in Marine Areas 10 and 11 there has been an increase of angler-trip participation density. The cause of this appears to be different in Area 10 and Area 11, with Area 10's total anglers increasing along with Area 10's anglers per day increasing and Area 11's total anglers decreasing (@fig-historical-effort) with Area 11's anglers per day increasing (@fig-historical-effort-denisty). This indicates that a primary factor behind Area 10's increase in effort being new anglers entering the fishery while Area 11 having similar number of anglers participating year-over-year in the fishery with decreasing days available for fishing - compressing the effort. 
 
@@ -272,9 +291,9 @@ ests %>%
 
 The increase in both angler-trips and efficiency of those angler trips has lead to an increase in the rate of catch in the month of July in both Areas 10 and 11. 
 
-#### Method of Estimating Encounters
+### Method of Estimating Encounters
 
-Total encounters (@eq-total-encounters), the primitive value of estimated releases and subsequently various management sub-categories is calculated with two variables and a constant. The constant, .87, is the the legal-marked release rate. The first variable, landed AD Chinook, is heavily influenced by factors of effort and efficiency outlined in [Effort and Efficiency](#effort-and-efficiency-of-the-sport-fishers-of-areas-10-and-11-in-the-month-of-july). The second variable, the legal-marked proportion is for the most part, an expression of the sublegal-to-legal ratio outlined in [Sublegal Ratios](#highly-variable-sublegal-to-legal-ratios).
+Total encounters (@eq-total-encounters), the primitive value of estimated releases and subsequently various management sub-categories is calculated with two variables and a constant. The constant, .87, is the mathematical interpretation of the 13% legal-marked release rate. The first variable, landed AD Chinook, is heavily influenced by factors of effort and efficiency outlined in [Effort and Efficiency](#effort-and-efficiency-of-the-sport-fishers-of-areas-10-and-11-in-the-month-of-july). The second variable, the legal-marked proportion is for the most part, an expression of the sublegal-to-legal ratio outlined in [Sublegal Ratios](#highly-variable-sublegal-to-legal-ratios).
 
 Landed AD catch and the legal-marked proportion have different degrees of influence on a final estimate of total encounters. The legal-marked proportion being a fraction does not scale linearly as the denominator and estimates of encounters exponentially increasing as the legal-marked proportion decreases (@fig-non-linear). The variance, standard error, and confidence intervals 
 
@@ -302,6 +321,30 @@ tibble(
 ```
 
 
-#### Summary
+### Summary
+The summer Chinook fisheries in Marine Area 10 and 11 in 2023 were heavily affected and compounded by the factors outlined above. A joint increase in effort density (@fig-historical-effort-denisty) and efficiency (@fig-effectiveness) resulted in a sizable number of landed Chinook in both the fisheries. The high variability of the sublegal-to-legal ratio contributed to a FRAM prediction of rate of encounters lower than what was observed (@fig-sub-legal-ratios), also compounded by the early time-period (@fig-run-timing) characterized by lack of legal-sized returning Chinook. 
+
+The culmination of these variables in our current methodology for estimating sport encounters resulted in estimates of encounters with incredible variability during the summer season. This resulted in fraction of a typical season length in Marine Area 11. In Area 10, this variability resulted in non-intuitive behavior of total sub-legal encounter quota utilization seen in the fishery - ultimately being expressed as large drop in total sub-legal encounters in a short time frame when the Chinook run entered the area and an unnecessary closure.
+
+
+## Analysis
+
+### Method
+
+A retrospective analysis was used to quantify the impact of management under the the total sub-legals Chinook category, as well as serve as a framework to retroactively intact management criteria to quantify alternate management strategies. Total sub-legal encounters, being a newer and more constraining management criteria, allows room for this category of management to be applied to past fisheries.
+
+
+The steps to create this framework is as follows:
+
+1. Estimates of catch by year for Areas 10 and 11 were broken out of their atomic strata into a daily form. This was done by dividing the estimated catch of the stratum by the number of days in the stratum creating a uniform estimate of catch across days within the stratum. This can cause allocation problems in regard to catch when subdividing a fishery in this data format, but for the purposes of this analysis the problem should be minimal.
+2. Cumulative VTR and test fishing data were compiled for each area and season in daily format.
+3. The equation to estimate total encounters (@eq-total-encounters) was applied daily using the estimated landed catch from Step 1 and the legal-marked proportion from Step 2. Total sub-legal encounters were estimated with estimated total encounters multiplied by the sum of the sub-legal marked and sub-legal unmarked proportion from Step 2.
+
+This yielded daily previous years daily fisheries estimates in the context of *in-season management*, or in other words how fisheries managers would have evaluated the fisheries for management decisions.
+
+### Previous Fisheries as Managed to Total Sub-Legal Encounters
+
+
+
 
 
