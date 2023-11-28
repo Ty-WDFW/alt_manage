@@ -1,0 +1,307 @@
+---
+title: "TBA"
+author: "Ty Garber"
+format:
+  html:
+    toc: true
+    code-fold: true
+    fig-width: 8
+    fig-height: 6
+editor: source
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(warning = FALSE, message = FALSE) 
+```
+
+```{r load_libraries, include=FALSE}
+# libraries
+suppressPackageStartupMessages(library(tidyverse))
+```
+
+```{r pssp_functions, include = F}
+tf_lm_summary <- function (.data, size_limit = 22)
+{
+  size_limit <- size_limit * 2.54
+  .data %>% filter(
+    common_name == "Chinook Salmon",
+    catch_result_type_code %in%
+      c("R", "K"),
+    adipose_clip_status_code %in% c("AD", "UM"),!is.na(total_length)
+  ) %>% mutate(legal = if_else(total_length >=
+                                 size_limit, "Legal", "Sublegal")) %>% tidyr::unite("legal_mark",
+                                                                                    legal, adipose_clip_status_code) %>% count(legal_mark) %>%
+    tidyr::pivot_wider(names_from = legal_mark, values_from = n)
+}
+```
+
+```{r load_data, include=FALSE}
+# regulation data
+regs <- read_csv(
+  here::here('data/regs.csv'),
+  col_types = cols(
+    areacode = col_character(),
+    area = col_character()
+    )
+  ) %>%
+  mutate(
+    area = str_pad(area, 2, side='left', '0'),
+    across(ends_with('_date'), \(x) as.Date(x, '%m/%d/%Y'))
+  ) %>%
+  janitor::clean_names()
+
+# 'exploded' regulations. each row is a day
+daily_regs <- regs %>%
+  filter(
+    area %in% c('10','11', '09'),
+    fishery_status == 'MSF'
+  ) %>%
+  rowwise() %>%
+  mutate(date = list(seq(reg_start_date, reg_end_date, by='day'))) |>
+  unnest(date)
+
+# daily estimates. estimates are made by stratum, which is
+# the finest unit possible. this data is broken out by day
+# (stratum estimate / days in stratum). not exact, especially
+# near the thresholds of the focal time period, but  when 
+# looking at entire seasons this should be fine.
+
+ests <- read_csv(here::here('data/chinook_ests.csv')) |>
+  janitor::clean_names()
+
+tf <- read_csv(here::here('data/test_fishing.csv')) |>
+  filter(target_species == 'Chinook salmon') |>
+  mutate(across(survey_datetime, as.Date),
+         across(catch_area_code, as.character)) |>
+  semi_join(daily_regs, # contextualized to open periods
+            by=c('survey_datetime'='date', 
+                 'catch_area_code' = 'area')
+            )
+
+
+vtr<- read_csv(here::here('data/vtr.csv'))  |>
+  mutate(across(survey_datetime, as.Date),
+         across(catch_area_code, as.character)) |>
+    semi_join(daily_regs, # contextualized to open periods
+            by=c('survey_datetime'='date', 
+                 'catch_area_code' = 'area')
+            )
+
+```
+
+## Introduction
+
+### Proposal
+
+Due to high catches and coinciding with high observed sub-legal-to-legal ratios early in summer (time-step 3) fisheries, WDFW is proposing publishing different dates than what appear in the the List of Agreed to Fisheries (LOAF). These dates will always be within the LOAF agreed-to dates, and will target the time period of historic greatest angler success - the month of August. WDFW, using its expanded test fishing monitoring program, will then monitor the legal and marked proportion (percentage of keepers encountered) of Chinook from the LOAF agreed-to and open the fishery early to Chinook retention when the observed test fishing legal and marked proportion approaches its Fishery Regulation Assessment Model (FRAM) counterpart.
+
+The goal of this proposal is to reduce sport fishing Chinook releases and their associated mortality, while making Area 10 and Area 11 sport fishing seasons more predictable by reducing variability associated with low legal and marked proportions.
+
+### Issue
+
+#### Run-timing
+Marine Areas 10 and 11 in the Summer of 2023 short Chinook sport seasons in time step 3 relative previous seasons. These fisheries were not only defined by a lack of time on the water with 28 days out of a total of 50 available in Area 10, and 14 days out a total 92 available in Area 11, but also low harvest and high sub-legal encounters relative to FRAM pre-season predictions.
+
+Shorter than planned seasons are not unprecedented for Puget Sound Chinook sport fisheries, as all recent intensive monitored Chinook sport fisheries have associated quotas which are managed to and subsequently closed to retention when those quotas are met. Typically in time step 3 (July - September) Areas 10 and 11 have similar opening dates every year: July 16th and July 1st respectively. These dates appear to be before the bulk of the Chinook run returning Puget Sound rivers (See @fig-run-timing).
+
+```{r run_timing}
+#| label: fig-run-timing
+#| fig-cap: 'Area 10 and 11 run timing as measured by CPUE'
+ests %>%
+  inner_join(daily_regs, by=c('area', 'days' = 'date')) %>% # contextualizes to open
+  filter(
+    lubridate::month(days) %in% c(7,8,9),
+    area %in% c('10', '11')
+    ) %>%
+  transmute(
+    area,
+    days,
+    cpue = chin_ad_ret / anglers,
+    disply_year = lubridate::`year<-`(days, 2023)
+  ) %>%
+  group_by(area, disply_year) %>%
+  summarize(mean = mean(cpue, na.rm = T), .groups = 'drop') %>%
+  ggplot(aes(disply_year, mean, group=1)) +
+  geom_line() +
+  geom_smooth(method = 'gam', se=FALSE) +
+  labs(subtitle = 'Mean CPUE Areas 10 and 11 (2007-2023)',
+       y = 'Mean CPUE',
+       x = 'Date') +
+  facet_wrap(~area, ncol = 1, scales = 'free')
+```
+
+#### Highly Variable Sublegal-to-Legal Ratios
+Sub-legal-to-legal ratios in Puget Sound sport fisheries show a large amount of variability year-to-year.
+Unfortunately there is not much literature explaining the cause of this variability, but it would
+be reasonable to speculate that survival, residency rates and juvenile migration patterns would explain
+much of the variation from year-to-year.
+
+Chinook FRAM uses a recent six year average of sub-legal-to-legal ratios for predictions of releases for 
+future fisheries. These predictions ultimately are expressed as total encounter quotas and their derivatives
+used for in-season management (total sub-legals, total unmarked, etc...). Considering the variability year-to-year of
+sub-legal-to-legal ratios (See @fig-sub-legal-ratios), there can a substantial difference between the six year mean use for 
+predicting the fishery versus what is actually being observed.
+
+For example, a sub-legal-to-legal ratios of 1.5 used for pre-season FRAM predictions and observed ratio of 2.5 will
+result in a fishery with less days than predicted when being in-season managed to a total encounter quota or any of 
+its derivatives. Estimates of releases in this scenario would be incurred at roughly 67% faster rate than what was 
+predicted from pre-season FRAM predictions.
+
+```{r sublegal_ratios}
+#| label: fig-sub-legal-ratios
+#| fig-cap: 'Sublegal-to-legal ratios by year for Areas 10 and 11. Note: figure might not match what was used for pre-season FRAM estimates.'
+
+# wrangling test fishing data
+tf_lm <- tf |>
+  filter(lubridate::month(survey_datetime) %in% c(7:9)) |>
+  group_by(catch_area_code, year = lubridate::year(survey_datetime)) |>
+  nest() |>
+  mutate(
+    lm = map(data, tf_lm_summary)
+  ) |>
+  unnest(lm) |>
+  mutate(
+    source = 'Test Fishing'
+  ) |>
+  ungroup() |>
+  select(-data)
+
+# wrangling VTR data
+vtr_lm <- vtr |>
+  filter(
+    lubridate::month(survey_datetime) %in% c(7:9),
+    adipose_clip_status_code %in% c('AD', 'UM'),
+    legal_size_status_description %in% c('Legal', 'Sublegal')
+         ) |>
+  group_by(
+    catch_area_code,
+           year = lubridate::year(survey_datetime),
+           legal_size_status_description,
+           adipose_clip_status_code
+  ) |>
+  summarize(
+    across(count, \(x) sum(x, na.rm=T)), .groups ='drop'
+  ) |>
+  unite('lm', legal_size_status_description, adipose_clip_status_code) |>
+  pivot_wider(names_from = 'lm',
+              values_from = 'count',
+              values_fill =0) |>
+  mutate(source = 'VTR')
+
+# calc sublegal ratios
+sublegal_ratios <- tf_lm |> 
+  bind_rows(vtr_lm) |>
+  mutate(
+    sublegal_ratio = (Sublegal_AD + Sublegal_UM) / (Legal_AD + Legal_UM)
+  )
+
+# plot
+sublegal_ratios |>
+  ggplot(aes(factor(year), sublegal_ratio, group=source, color=source)) +
+  geom_line() +
+  facet_wrap(~catch_area_code, ncol=1) +
+  labs(
+    subtitle = 'Sublegal Ratios as Defined by VTR and Test Fishing. Areas 10 and 11',
+    x = 'Year',
+    y = 'Sublegla Ratio'
+  ) +
+  theme(legend.title = element_blank(), legend.position = 'bottom')
+  
+```
+
+#### Effort and Efficiency of the Sport Fishers of Areas 10 and 11 in the Month of July
+
+Over the last eight summer July seasons in Marine Areas 10 and 11 there has been an increase of angler-trip participation density. The cause of this appears to be different in Area 10 and Area 11, with Area 10's total anglers increasing along with Area 10's anglers per day increasing and Area 11's total anglers decreasing (@fig-historical-effort) with Area 11's anglers per day increasing (@fig-historical-effort-denisty). This indicates that a primary factor behind Area 10's increase in effort being new anglers entering the fishery while Area 11 having similar number of anglers participating year-over-year in the fishery with decreasing days available for fishing - compressing the effort. 
+
+```{r historical_effort}
+#| label: fig-historical-effort
+#| fig-cap: 'Area 10 and Area 11 total angler-trips in the Month of July'
+effort <- ests %>%
+  inner_join(daily_regs, by = c('area', 'days' = 'date')) %>% # contextualizes to open
+  filter(lubridate::month(days) %in% c(7),
+         area %in% c('10', '11')) |>
+  group_by(run_year, area) |>
+  summarize(across(anglers, \(x) sum(x, na.rm = T)),
+            days_open = n(),
+            .groups = 'drop')
+
+effort |>
+  ggplot(aes(factor(run_year), anglers, group = 1)) +
+  geom_line() +
+  facet_wrap(~area, ncol = 1, scales = 'free_y') +
+  labs(subtitle = 'Total Anglers in Marine Areas 10 and 11 during July',
+       y = 'Anglers',
+       x = 'Year')
+
+```
+
+```{r historical_effort_denisty}
+#| label: fig-historical-effort-denisty
+#| fig-cap: 'Area 10 and Area 11 total angler-trips per Day in the Month of July'
+effort |>
+  ggplot(aes(factor(run_year), anglers / days_open, group = 1)) +
+  geom_line() +
+  facet_wrap( ~ area, ncol = 1, scales = 'free_y') +
+  labs(subtitle = 'Anglers per Day in Marine Areas 10 and 11 (July)',
+       y = 'Anglers per Day',
+       x = 'Year')
+```
+
+The efficient as measured by CPUE (Retained Chinook per Angler-trip) in the month of July has also increased, particularly in Marine Area 11 (@fig-effectiveness). The cause of how anglers can be more efficient at landing Chinook is purely speculative, but large societal changes in methods of communications and information availability likely have at least a moderate influence. The widespread adoption of the internet in the mid-2000's subsequently social media have changed the way anglers communicate with each other, allowing them to share information about locations of fish widely and instantly. A large body of detailed fishing information available on internet websites, videos and blogs is also available from all internet connect devices any time of day.
+
+```{r effectiveness}
+#| label: fig-effectiveness
+#| fig-cap: 'Area 10 and Area 11 total angler-trips per Day in the Month of July'
+ests %>%
+  inner_join(daily_regs, by = c('area', 'days' = 'date')) %>% # contextualizes to open
+  filter(lubridate::month(days) %in% c(7),
+         area %in% c('10', '11')) |>
+  group_by(run_year, area) |>
+  summarize(across(c(anglers, chin_ad_ret), \(x) sum(x, na.rm = T)),
+            days_open = n(),
+            .groups = 'drop') |>
+  ggplot(aes(factor(run_year), chin_ad_ret / anglers, group = 1)) +
+  geom_line() +
+  facet_wrap( ~ area, ncol = 1, scales = 'free_y') +
+  labs(subtitle = 'Catch per Unit of Effort (Retained Chinook AD / Angler-trip) in Areas 10 And 11 (July)',
+       y = 'CPUE',
+       x = 'Year')
+  
+```
+
+
+The increase in both angler-trips and efficiency of those angler trips has lead to an increase in the rate of catch in the month of July in both Areas 10 and 11. 
+
+#### Method of Estimating Encounters
+
+Total encounters (@eq-total-encounters), the primitive value of estimated releases and subsequently various management sub-categories is calculated with two variables and a constant. The constant, .87, is the the legal-marked release rate. The first variable, landed AD Chinook, is heavily influenced by factors of effort and efficiency outlined in [Effort and Efficiency](#effort-and-efficiency-of-the-sport-fishers-of-areas-10-and-11-in-the-month-of-july). The second variable, the legal-marked proportion is for the most part, an expression of the sublegal-to-legal ratio outlined in [Sublegal Ratios](#highly-variable-sublegal-to-legal-ratios).
+
+Landed AD catch and the legal-marked proportion have different degrees of influence on a final estimate of total encounters. The legal-marked proportion being a fraction does not scale linearly as the denominator and estimates of encounters exponentially increasing as the legal-marked proportion decreases (@fig-non-linear). The variance, standard error, and confidence intervals 
+
+$$ 
+Total Encounters = \frac{Est. AD}{.87}\div LM\%
+$$ {#eq-total-encounters} 
+
+
+```{r non_linear_total_encounters}
+#| label: fig-non-linear
+#| fig-cap: 'The relationship between legal-marked proportion and estimates of Total Encounters'
+
+tibble(
+  lm = seq(.01, 1, by = .01),
+  encounters = 1 / .87 / lm
+) |>
+  ggplot(aes(lm, encounters, group=1))  +
+    geom_line() +
+  labs(
+    subtitle = 'Estimate of Total Encounters per Landed AD Chinook',
+    x = 'Legal-marked Proportion',
+    y = 'Estimate Total Encounters'
+  )
+
+```
+
+
+#### Summary
+
+

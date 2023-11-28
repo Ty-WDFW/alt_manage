@@ -51,3 +51,4 @@ rsconnect/
 # database dump files
 dump_encounters.R
 *.mdb
+/.quarto/
