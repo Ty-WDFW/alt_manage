@@ -1,6 +1,6 @@
 ---
-title: "TBA"
-author: "Ty Garber"
+title: "Adaptive Management in Marine Area 10 and 11 Summer Sport Fisheries"
+author: "Ty Garber and Sarah Richardson"
 format:
   html:
     toc: true
@@ -23,14 +23,14 @@ suppressPackageStartupMessages(library(tidyverse))
 tf_lm_summary <- function (.data, size_limit = 22)
 {
   size_limit <- size_limit * 2.54
-  .data %>% filter(
+  .data |> filter(
     common_name == "Chinook Salmon",
-    catch_result_type_code %in%
-      c("R", "K"),
-    adipose_clip_status_code %in% c("AD", "UM"),!is.na(total_length)
-  ) %>% mutate(legal = if_else(total_length >=
-                                 size_limit, "Legal", "Sublegal")) %>% tidyr::unite("legal_mark",
-                                                                                    legal, adipose_clip_status_code) %>% count(legal_mark) %>%
+    catch_result_type_code %in%  c("R", "K"),
+    adipose_clip_status_code %in% c("AD", "UM"),
+    !is.na(total_length)) |> 
+    mutate(legal = if_else(total_length >= size_limit, "Legal", "Sublegal")) |>
+    tidyr::unite("legal_mark", legal, adipose_clip_status_code) |>
+    count(legal_mark) |>
     tidyr::pivot_wider(names_from = legal_mark, values_from = n)
 }
 ```
@@ -43,20 +43,20 @@ regs <- read_csv(
     areacode = col_character(),
     area = col_character()
     )
-  ) %>%
+  ) |>
   mutate(
     area = str_pad(area, 2, side='left', '0'),
     across(ends_with('_date'), \(x) as.Date(x, '%m/%d/%Y'))
-  ) %>%
+  ) |>
   janitor::clean_names()
 
 # 'exploded' regulations. each row is a day
-daily_regs <- regs %>%
+daily_regs <- regs |>
   filter(
     area %in% c('10','11', '09'),
     fishery_status == 'MSF'
-  ) %>%
-  rowwise() %>%
+  ) |>
+  rowwise() |>
   mutate(date = list(seq(reg_start_date, reg_end_date, by='day'))) |>
   unnest(date)
 
@@ -67,8 +67,12 @@ daily_regs <- regs %>%
 # looking at entire seasons this should be fine.
 
 ests <- read_csv(here::here('data/chinook_ests.csv')) |>
-  janitor::clean_names()
+  janitor::clean_names() |>
+  semi_join(daily_regs, by = c('days' = 'date',
+                               'area' = 'area'))
 
+
+# test fishing and vtr data
 tf <- read_csv(here::here('data/test_fishing.csv')) |>
   filter(target_species == 'Chinook salmon') |>
   mutate(across(survey_datetime, as.Date),
@@ -87,11 +91,41 @@ vtr<- read_csv(here::here('data/vtr.csv'))  |>
                  'catch_area_code' = 'area')
             )
 
+# fram msf screen reports
+fram_enc <- read_csv(here::here('data/fram_lm.csv')) |>
+  filter(fishery_id %in% 56:57) # area 10, 11
+fram_landed_catch <- read_csv(here::here('data/fram_landed_catch.csv')) |>
+  filter(fishery_id %in% 56:57) |> # area 10, 11
+  select(everything(),landed_catch_marked = legal_marked, landed_catch_unmarked = legal_unmarked)
+
+# tidy up fram data into tight dataframe
+fram_parameters <- fram_enc |>
+  inner_join(fram_landed_catch) |>
+  mutate(
+    total_sublegal = sublegal_marked + sublegal_unmarked,
+    total_unmarked = legal_unmarked + sublegal_unmarked,
+    total_harvest = landed_catch_marked + landed_catch_unmarked,
+    catch_area_code = recode(fishery_id, `56` = '10', `57` = '11'),
+    run_year = recode(run_id,
+                      `1` = 2013,
+                      `2` = 2014,
+                      `3` = 2015,
+                      `4` = 2016,
+                      `5` = 2017,
+                      `6` = 2018,
+                      `7` = 2019,
+                      `8` = 2020,
+                      `9` = 2021,
+                      `10` = 2022,
+                      `11` = 2023,
+                      )
+  ) |>
+  select(run_year, fishery_id, time_step, everything(), -run_id, -c(legal_marked:landed_catch_unmarked))
 ```
 
 ## Introduction
 
-Marine Areas 10 and 11 in the Summer of 2023 short Chinook sport seasons in time step 3 relative previous seasons. These fisheries were not only defined by a lack of time on the water with 28 days out of a total of 50 available in Area 10, and 14 days out a total 92 available in Area 11, but also low harvest and high sub-legal encounters relative to FRAM pre-season predictions.
+Marine Areas 10 and 11 in the Summer of 2023 short Chinook sport seasons in time step 3 relative previous seasons. These fisheries were not only defined by a lack of time on the water with 28 days out of a total of 50 available in Area 10, and 8 days out a total 92 available in Area 11, but also low harvest and high sub-legal encounters relative to FRAM pre-season predictions.
 
 Marine Areas 10 and 11 in the Summer of 2023 short Chinook sport seasons in time step 3 relative previous seasons. These fisheries were not only defined by a lack of time on the water with 28 days out of a total of 50 available in Area 10, and 14 days out a total 92 available in Area 11, but also low harvest and high sub-legal encounters relative to FRAM pre-season predictions.
 
@@ -126,20 +160,20 @@ daily_regs |>
 ```{r run_timing}
 #| label: fig-run-timing
 #| fig-cap: 'Area 10 and 11 run timing as measured by CPUE'
-ests %>%
-  inner_join(daily_regs, by=c('area', 'days' = 'date')) %>% # contextualizes to open
+ests |>
+  inner_join(daily_regs, by=c('area', 'days' = 'date')) |> # contextualizes to open
   filter(
     lubridate::month(days) %in% c(7,8,9),
     area %in% c('10', '11')
-    ) %>%
+    ) |>
   transmute(
     area,
     days,
     cpue = chin_ad_ret / anglers,
     disply_year = lubridate::`year<-`(days, 2023)
-  ) %>%
-  group_by(area, disply_year) %>%
-  summarize(mean = mean(cpue, na.rm = T), .groups = 'drop') %>%
+  ) |>
+  group_by(area, disply_year) |>
+  summarize(mean = mean(cpue, na.rm = T), .groups = 'drop') |>
   ggplot(aes(disply_year, mean, group=1)) +
   geom_line() +
   geom_smooth(method = 'gam', se=FALSE) +
@@ -220,7 +254,7 @@ sublegal_ratios |>
   geom_line() +
   facet_wrap(~catch_area_code, ncol=1) +
   labs(
-    subtitle = 'Sublegal Ratios as Defined by VTR and Test Fishing. Areas 10 and 11',
+    subtitle = 'Sublegal to Legal Ratios as Defined by VTR and Test Fishing. Areas 10 and 11',
     x = 'Year',
     y = 'Sublegla Ratio'
   ) +
@@ -235,8 +269,8 @@ Over the last eight summer July seasons in Marine Areas 10 and 11 there has been
 ```{r historical_effort}
 #| label: fig-historical-effort
 #| fig-cap: 'Area 10 and Area 11 total angler-trips in the Month of July'
-effort <- ests %>%
-  inner_join(daily_regs, by = c('area', 'days' = 'date')) %>% # contextualizes to open
+effort <- ests |>
+  inner_join(daily_regs, by = c('area', 'days' = 'date')) |> # contextualizes to open
   filter(lubridate::month(days) %in% c(7),
          area %in% c('10', '11')) |>
   group_by(run_year, area) |>
@@ -266,13 +300,13 @@ effort |>
        x = 'Year')
 ```
 
-The efficient as measured by CPUE (Retained Chinook per Angler-trip) in the month of July has also increased, particularly in Marine Area 11 (@fig-effectiveness). The cause of how anglers can be more efficient at landing Chinook is purely speculative, but large societal changes in methods of communications and information availability likely have at least a moderate influence. The widespread adoption of the internet in the mid-2000's subsequently social media have changed the way anglers communicate with each other, allowing them to share information about locations of fish widely and instantly. A large body of detailed fishing information available on internet websites, videos and blogs is also available from all internet connect devices any time of day.
+Angler success as measured by CPUE (Retained Chinook per Angler-trip) in the month of July has also increased, particularly in Marine Area 11 (@fig-effectiveness). The cause of how anglers can be more efficient at landing Chinook is purely speculative, but large societal changes in methods of communications and information availability likely have at least a moderate influence. The widespread adoption of the internet in the early-2000’s and subsequently social media have changed the way anglers communicate with each other, allowing them to instantly share information on the locations of fish. A large body of detailed fishing information is available on websites, videos and blogs on any device connected to the internet at all hours. Additionally, the availability of mobile devices and GPS systems have allowed anglers to instantaneously track weather patterns and fishing locations more precisely than ever before. These advancements in technology have likely helped anglers to some unknown degree in catching fish at more efficient rates than 20 years ago. 
 
 ```{r effectiveness}
 #| label: fig-effectiveness
 #| fig-cap: 'Area 10 and Area 11 total angler-trips per Day in the Month of July'
-ests %>%
-  inner_join(daily_regs, by = c('area', 'days' = 'date')) %>% # contextualizes to open
+ests |>
+  inner_join(daily_regs, by = c('area', 'days' = 'date')) |> # contextualizes to open
   filter(lubridate::month(days) %in% c(7),
          area %in% c('10', '11')) |>
   group_by(run_year, area) |>
@@ -338,12 +372,194 @@ The steps to create this framework is as follows:
 
 1. Estimates of catch by year for Areas 10 and 11 were broken out of their atomic strata into a daily form. This was done by dividing the estimated catch of the stratum by the number of days in the stratum creating a uniform estimate of catch across days within the stratum. This can cause allocation problems in regard to catch when subdividing a fishery in this data format, but for the purposes of this analysis the problem should be minimal.
 2. Cumulative VTR and test fishing data were compiled for each area and season in daily format.
-3. The equation to estimate total encounters (@eq-total-encounters) was applied daily using the estimated landed catch from Step 1 and the legal-marked proportion from Step 2. Total sub-legal encounters were estimated with estimated total encounters multiplied by the sum of the sub-legal marked and sub-legal unmarked proportion from Step 2.
+3. The equation to estimate total encounters (@eq-total-encounters) was applied daily using the estimated landed catch from Step 1 and the legal-marked proportions from Step 2. Total sub-legal encounters were estimated with estimated total encounters multiplied by the sum of the sub-legal marked and sub-legal unmarked proportion from Step 2.
 
 This yielded daily previous years daily fisheries estimates in the context of *in-season management*, or in other words how fisheries managers would have evaluated the fisheries for management decisions.
 
 ### Previous Fisheries as Managed to Total Sub-Legal Encounters
 
+```{r daily_estimates_prep, include=FALSE}
+
+# pertinent years/fields for estimates, cummsum catch
+ests_prep <- ests |>
+  select(date = days, area, chin_ad_ret, chin_um_ret) |>
+  filter(lubridate::year(date) >= 2013, # fram can't reliably go back further
+         lubridate::month(date) %in% 7:9, # time step 3
+         area %in% c('10', '11')) |>
+  group_by(year = lubridate::year(date), area) |>
+  mutate(across(chin_ad_ret:chin_um_ret, \(x) cumsum(x)),
+         est_harvest = chin_ad_ret+chin_um_ret) |>
+  ungroup()
+
+```
+
+```{r test_fishing_prep, include= FALSE}
+# convert raw data to lm counts
+tf_daily_counts <- tf |>
+  filter(lubridate::month(survey_datetime) %in% c(7, 8, 9),
+         lubridate::year(survey_datetime) >= 2013) |>
+  group_by(catch_area_code,
+           year = lubridate::year(survey_datetime),
+           survey_datetime) |>
+  nest() |>
+  mutate(tf = map(data, tf_lm_summary)) |>
+  unnest(tf) |>
+  mutate(across(everything(), \(x) replace_na(x, 0))) |>
+  ungroup() |>
+  select(-data)
+
+tf_daily_proportions <- tf_daily_counts |>
+  arrange(catch_area_code,survey_datetime) |> # important for cumsum
+  group_by(year, catch_area_code) |>
+  mutate(across(c(
+    Legal_AD, Legal_UM, Sublegal_AD, Sublegal_UM
+  ), \(x) cumsum(x)),
+  # across(
+  #   c(Legal_AD, Legal_UM, Sublegal_AD, Sublegal_UM),
+  #   \(x) x / (Legal_AD + Legal_UM + Sublegal_AD + Sublegal_UM) # convert to running proportions
+  # )
+  ) |> 
+  ungroup()
+```
+
+```{r vtr_prep, include = FALSE}
+# going with vtrs in 11 when there was no test fishing
+vtr_daily_counts <- vtr |>
+  filter(catch_area_code == '11',
+         between(lubridate::year(survey_datetime), 2013, 2020),
+         lubridate::month(survey_datetime) %in% 7:9,
+         legal_size_status_description %in% c('Legal', 'Sublegal'),
+         adipose_clip_status_code %in% c('AD', 'UM')
+         ) |>
+  unite('lm', legal_size_status_description, adipose_clip_status_code) |>
+  group_by(survey_datetime, year = lubridate::year(survey_datetime), lm, catch_area_code) |>
+  summarise(count = sum(count), .groups='drop') |>
+  pivot_wider(names_from = lm, values_from=count, values_fill = 0 )
+
+vtr_daily_proportions <- vtr_daily_counts |>
+  arrange(survey_datetime) |> # important for cumsum
+  group_by(year) |>
+  mutate(across(c(
+    Legal_AD, Legal_UM, Sublegal_AD, Sublegal_UM
+  ), \(x) cumsum(x)),
+  across(
+    c(Legal_AD, Legal_UM, Sublegal_AD, Sublegal_UM),
+    \(x) x / (Legal_AD + Legal_UM + Sublegal_AD + Sublegal_UM) # convert to running proportions
+  )) |> 
+  ungroup()
+
+```
+
+
+```{r combined_encounter_datasets, include = FALSE}
+
+encounters <- tf_daily_proportions |>
+  bind_rows(vtr_daily_proportions)
+
+
+# check for overlap
+encounters |>
+  count(survey_datetime, catch_area_code) |>
+  filter(n > 1)
+
+```
+
+```{r estimates}
+estimates <- ests_prep |>
+  left_join(
+    encounters %>%
+      select(survey_datetime, catch_area_code, Legal_AD:Sublegal_UM),
+    by = c('date' = 'survey_datetime', 'area' = 'catch_area_code') # join cumsum test fishing, fill na'
+  ) %>%
+  fill(everything(), .direction = 'down') # days where testfishing didn't take place roll over
+
+# calculate encounter estimates
+estimates_fram <- estimates |>
+  mutate(
+    est_total_encounters = chin_ad_ret / Legal_AD / .87,
+    est_total_sublegal = est_total_encounters * (Sublegal_AD + Sublegal_UM)
+  ) |>
+  select(year,date, area, est_harvest, est_total_encounters, est_total_sublegal) |>
+  left_join(fram_parameters, by = c('area' = 'catch_area_code', 'year' = 'run_year')) |>
+  filter(lubridate::month(date) %in% 7:9)
+
+```
+
+#### A Retroactive Look at Marine Area 10 and 11 Fisheries
+
+```{r area_ten_retro}
+#| label: fig-ten-fisheries-total-harvest
+#| fig-cap: 'Area 10 summer fisheries landed catch as viewed in the context of in-season management'
+
+estimates_fram |>
+  filter(area == 10) |>
+  select(year, date, est_harvest, total_harvest) |>
+  pivot_longer(est_harvest:total_harvest) |>
+  ggplot(aes(date, value, group = name)) +
+  geom_line() +
+  facet_wrap( ~ year, scales = 'free', ncol = 3) +
+  labs(subtitle = 'Marine Area 10 Estimated Landed Catch vs. FRAM Predicted Landed Catch',
+       x = 'Date',
+       y = 'Landed Catch')
+
+```
+
+
+```{r area_ten_retro_total_sublegal}
+#| label: fig-ten-fisheries-total-sublegal
+#| fig-cap: 'Area 10 summer fisheries estimated total sublegal encounters as viewed in the context of in-season management'
+
+estimates_fram |>
+  filter(area == 10) |> #View()
+  select(year, date, est_total_sublegal, total_sublegal) |>
+  pivot_longer(est_total_sublegal:total_sublegal) |>
+  ggplot(aes(date, value, group = name)) +
+  geom_line() +
+  facet_wrap( ~ year, scales = 'free', ncol = 3) +
+  labs(subtitle = 'Marine Area 10 Estimated Total Sublegal Encounters vs. FRAM Predicted Total Sublegals',
+       x = 'Date',
+       y = 'Total Sublegal Encounters')
+
+```
+
+
+```{r area_eleven_retro}
+#| label: fig-eleven-fisheries-total-harvest
+#| fig-cap: 'Area 11 summer fisheries landed catch as viewed in the context of in-season management'
+
+estimates_fram |>
+  filter(area == 11) |>
+  select(year, date, est_harvest, total_harvest) |># View()
+  pivot_longer(est_harvest:total_harvest) |>
+  ggplot(aes(date, value, group = name)) +
+  geom_line() +
+  facet_wrap( ~ year, scales = 'free', ncol = 3) +
+  labs(subtitle = 'Marine Area 11 Estimated Landed Catch vs. FRAM Predicted Landed Catch',
+       x = 'Date',
+       y = 'Landed Catch')
+
+```
+
+
+```{r area_eleven_retro_total_sublegal}
+#| label: fig-eleven-fisheries-total-sublegal
+#| fig-cap: 'Area 11 summer fisheries estimated total sublegal encounters as viewed in the context of in-season management'
+
+estimates_fram |>
+  filter(area == 11) |> #View()
+  select(year, date, est_total_sublegal, total_sublegal) |> #View()
+  pivot_longer(est_total_sublegal:total_sublegal) |>
+  ggplot(aes(date, value, group = name)) +
+  geom_line() +
+  facet_wrap( ~ year, scales = 'free', ncol = 3) +
+  labs(subtitle = 'Marine Area 11 Estimated Total Sublegal Encounters vs. FRAM Predicted Total Sublegals',
+       x = 'Date',
+       y = 'Total Sublegal Encounters')
+
+```
+
+## Conclusion
+### Considerations
 
 
 
