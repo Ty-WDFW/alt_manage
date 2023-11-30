@@ -329,7 +329,8 @@ The increase in both angler-trips and efficiency of those angler trips has lead 
 
 Total encounters (@eq-total-encounters), the primitive value of estimated releases and subsequently various management sub-categories is calculated with two variables and a constant. The constant, .87, is the mathematical interpretation of the 13% legal-marked release rate. The first variable, landed AD Chinook, is heavily influenced by factors of effort and efficiency outlined in [Effort and Efficiency](#effort-and-efficiency-of-the-sport-fishers-of-areas-10-and-11-in-the-month-of-july). The second variable, the legal-marked proportion is for the most part, an expression of the sublegal-to-legal ratio outlined in [Sublegal Ratios](#highly-variable-sublegal-to-legal-ratios).
 
-Landed AD catch and the legal-marked proportion have different degrees of influence on a final estimate of total encounters. The legal-marked proportion being a fraction does not scale linearly as the denominator and estimates of encounters exponentially increasing as the legal-marked proportion decreases (@fig-non-linear). The variance, standard error, and confidence intervals 
+Landed AD catch and the legal-marked proportion have different degrees of influence on a final estimate of total encounters. The legal-marked proportion being a fraction does not scale linearly as the denominator yielding estimates of encounters that exponentially increase as the legal-marked proportion decreases (@fig-non-linear), where landed catch tends to steadily accumulate of othe course of the fishery.
+
 
 $$ 
 Total Encounters = \frac{Est. AD}{.87}\div LM\%
@@ -350,13 +351,47 @@ tibble(
     subtitle = 'Estimate of Total Encounters per Landed AD Chinook',
     x = 'Legal-marked Proportion',
     y = 'Estimate Total Encounters'
-  )
+  ) +
+  scale_x_continuous(labels = scales::percent)
+
+```
+
+
+Estimates of total encounters' variation or uncertainty is contingent on sample size of
+the encounters dataset being used for estimation, either VTRs test fishing or a combination 
+of both. It also is an expression of the legal-marked proportion itself, where uncertainty
+of an estimate of encounters increases as the the legal-marked proportion decreases (@fig-uncertantity).
+
+```{r lm_uncertainty}
+#| label: fig-uncertantity
+#| fig-cap: 'The relationship between legal-marked proportion and coeffiecient of variation at differing sample size levels'
+#| 
+tibble(
+  lm = seq(.01, 1, by = .01),
+  sample_size = list(seq(10,100, by=20))
+) |>
+  unnest(sample_size) |>
+  mutate(
+    variance = ((1-lm) * (lm)) / (sample_size - 1),
+    sd = sqrt(variance),
+    cv = sd / lm
+  ) |>
+  ggplot(aes(lm, cv, group=factor(sample_size), color=factor(sample_size))) +
+  geom_line() +
+  scale_y_continuous(labels = scales::percent, limits = c(0, 1)) +
+  scale_x_continuous(labels = scales::percent) +
+  labs(
+    subtitle = 'Coefficient of Variation at Sample Size of the Legal-Marked Proportion ',
+    x = 'Legal-Marked Proportion',
+    y = 'CV%'
+  ) +
+  guides(color = guide_legend(title = 'Encounters'))
 
 ```
 
 
 ### Summary
-The summer Chinook fisheries in Marine Area 10 and 11 in 2023 were heavily affected and compounded by the factors outlined above. A joint increase in effort density (@fig-historical-effort-denisty) and efficiency (@fig-effectiveness) resulted in a sizable number of landed Chinook in both the fisheries. The high variability of the sublegal-to-legal ratio contributed to a FRAM prediction of rate of encounters lower than what was observed (@fig-sub-legal-ratios), also compounded by the early time-period (@fig-run-timing) characterized by lack of legal-sized returning Chinook. 
+The summer Chinook fisheries in Marine Area 10 and 11 in 2023 were heavily affected and compounded by the factors outlined above. A joint increase in effort density (@fig-historical-effort-denisty) and efficiency (@fig-effectiveness) resulted in a sizable number of landed Chinook in both the fisheries early in the season. The high variability of the sublegal-to-legal ratio contributed to a FRAM prediction of rate of encounters lower than what was observed (@fig-sub-legal-ratios). Compounding the issue the early time-period (@fig-run-timing) was characterized by lack of availability legal-sized returning Chinook, which resulted in low legal-marked proportions being used for estimates of encounters yielding estimates of encounters with high release rates (@fig-non-linear) and high uncertainty (@fig-uncertantity).
 
 The culmination of these variables in our current methodology for estimating sport encounters resulted in estimates of encounters with incredible variability during the summer season. This resulted in fraction of a typical season length in Marine Area 11. In Area 10, this variability resulted in non-intuitive behavior of total sub-legal encounter quota utilization seen in the fishery - ultimately being expressed as large drop in total sub-legal encounters in a short time frame when the Chinook run entered the area and an unnecessary closure.
 
@@ -414,10 +449,10 @@ tf_daily_proportions <- tf_daily_counts |>
   mutate(across(c(
     Legal_AD, Legal_UM, Sublegal_AD, Sublegal_UM
   ), \(x) cumsum(x)),
-  # across(
-  #   c(Legal_AD, Legal_UM, Sublegal_AD, Sublegal_UM),
-  #   \(x) x / (Legal_AD + Legal_UM + Sublegal_AD + Sublegal_UM) # convert to running proportions
-  # )
+  across(
+    c(Legal_AD, Legal_UM, Sublegal_AD, Sublegal_UM),
+    \(x) x / (Legal_AD + Legal_UM + Sublegal_AD + Sublegal_UM) # convert to running proportions
+  )
   ) |> 
   ungroup()
 ```
@@ -485,7 +520,31 @@ estimates_fram <- estimates |>
 
 ```
 
-#### A Retroactive Look at Marine Area 10 and 11 Fisheries
+### A Retroactive Look at Marine Area 10 and 11 Fisheries
+
+For the majority seasons of the intensively monitored Mark-Selective fishery era of 
+Puget Sound sport Chinook salmon fisheries in Marine Areas 10 and 11, the only management
+criteria has been total harvest (landed Chinook). Recent years have seen the addition
+of management criteria based on total encounters and/or it's sub-categories, e.g. total 
+unmarked encounters, total sub-legal encounters. As outlined in the [issue](#summary) section
+of this document, the mathematical operation of estimating total encounters (@eq-total-encounters) introduces 
+a large amount of variability when sample sizes of encounters reported on VTRs or test fishing are low (@fig-non-linear),
+notably when coinciding with a low legal-marked proportion (@fig-uncertantity).
+
+
+Below are daily estimates of total landed catch (@fig-ten-fisheries-total-harvest, @fig-eleven-fisheries-total-harvest) and
+daily estimates of total sublegal encounters (@fig-ten-fisheries-total-sublegal, @fig-eleven-fisheries-total-sublegal). Horizontal lines on the graphs represent the coinciding predicted FRAM value for the fishery. The graphs can be interpreted
+as a fishery being execute in the context of in-season management, where the estimated value intersects the FRAM predicted value
+the fishery closes on the date on the x-axis. 
+
+When comparing the graphs displaying total landed catch versus the graphs displaying
+total sub-legal encounters, there is a striking difference in variation between the two.
+Total landed catch has a steady and predictable increase over time, while total sub-legals
+frequently will vary by *thousands* of encounters - often going over the FRAM predicted value, 
+descending back under it before going above it again. Depending on the in-season estimate production
+cycle, usually done weekly, this can close a fishery in one week and suggest reopening the next week
+when a new estimate is made, as seen in August in Area 10 in Summer 2023.
+
 
 ```{r area_ten_retro}
 #| label: fig-ten-fisheries-total-harvest
@@ -558,8 +617,178 @@ estimates_fram |>
 
 ```
 
+### Identifing Presenence of Sub-legals
+The abundance of sub-legals is notoriously [hard to predict](#highly-variable-sublegal-to-legal-ratios) 
+in Puget Sound sport fisheries. Observing current sub-legal abundance is straight forward and can be
+done in near real-time with the recent expansion of the number of test fishing boats surveying
+Puget Sound. Test fishing data is available for management decisions immediately after the
+survey is completed through electronic data collection.
+
+### Reimagining Prior Fisheries
+
+Using the graphs above it is possible to identify years with high presence of sub-legal
+Chinook in the fishery, as well as identify when the fishery would have closed given the
+predicted FRAM value (@tbl-fishery-final) along with how much quota was utilitzed.
+
+For this analysis, years 2017, 2020, and 2023 were chosen for Area 10, and 2015, 2017, 2018, 2019, and 2021 for Area 11 as they represent the largest overages of total sub-legal encounters earliest within their seasons (@fig-ten-fisheries-total-sublegal).
+
+```{r selected_fisheries_final_values}
+#| label: tbl-fishery-final
+#| tbl-cap: 'Fishery dates a quota utilizations where estimated total sublegals initially exceed FRAM predictions'
+
+estimates_fram |>
+  filter(
+         !is.infinite(est_total_sublegal),
+         
+         (area == '10' & year %in% c(2017, 2021, 2023)) |
+         (area == '11' & year %in% c(2015, 2017:2019, 2021)),
+         est_total_sublegal >= total_sublegal
+         ) |>
+  group_by(area, year) |>
+  slice_min(date, n=1) |>
+  bind_rows(estimates_fram |> # 11 2023 never exceeded fram due to in-season management
+              filter(area == '11', year == 2023) |>
+              slice_max(date)
+            ) |>
+  mutate(
+    total_harvest_percentage = est_harvest / total_harvest,
+    total_sublegal_percentage = est_total_sublegal / total_sublegal
+  ) |>
+  select(year, area, date, total_harvest_percentage, total_sublegal_percentage) |>
+  knitr::kable(
+    col.names = c('Year',
+                           'Area',
+                           'Assumed Closure',
+                           'Percentage of Total Harvest',
+                  'Percentage of Total Subelgals'),
+    digits = 2
+  )
+
+```
+As shown in (@tbl-fishery-final), there is a large difference in quota utilization
+between the total harvest category and the total sub-legal encounter category before
+a fishery is closed. These fisheries would be not only be characterized by their
+short seasons effecting sample sizes of VTR and test fishing encounters and uncertainty
+of the estimates, but large estimates of sub-legal moralities relative to landed catch.
+
+Creating these fisheries with an August 1st
+
+```{r story_of_recreation_prep, include=F}
+# starting these fisheries on august 1st
+
+# prep retention
+ests_re <- ests |>
+  select(date = days, area, chin_ad_ret, chin_um_ret) |>
+  filter((area == '10' & lubridate::year(date) %in% c(2017, 2021, 2023)) |
+         (area == '11' & lubridate::year(date) %in% c(2015, 2017:2019, 2021)), 
+         lubridate::month(date) %in% 8:9, #no july
+         ) |>
+  group_by(year = lubridate::year(date), area) |>
+  mutate(across(chin_ad_ret:chin_um_ret, \(x) cumsum(x)),
+         est_harvest = chin_ad_ret+chin_um_ret) |>
+  ungroup()
+
+# prep vtr/tf encounters
+tf_daily_proportions_re <- tf_daily_counts |>
+  filter(
+    (
+      catch_area_code == '10' &
+        lubridate::year(survey_datetime) %in% c(2017,
+                                                2021,
+                                                2023)
+    ) |
+      (
+        catch_area_code == '11' &
+          lubridate::year(survey_datetime) %in% c(2015,
+                                                  2017:2019,
+                                                  2021)
+      ),
+    lubridate::month(survey_datetime) %in% 8:9 #no july
+  ) |>
+  arrange(catch_area_code,survey_datetime) |> # important for cumsum
+  group_by(year, catch_area_code) |>
+  mutate(across(c(
+    Legal_AD, Legal_UM, Sublegal_AD, Sublegal_UM
+  ), \(x) cumsum(x)),
+  across(
+    c(Legal_AD, Legal_UM, Sublegal_AD, Sublegal_UM),
+    \(x) x / (Legal_AD + Legal_UM + Sublegal_AD + Sublegal_UM) # convert to running proportions
+  )
+  ) |> 
+  ungroup()
+
+vtr_daily_proportions_re <- vtr_daily_counts |>
+  filter(lubridate::month(survey_datetime) %in% c(8:9)) |>
+  arrange(survey_datetime) |> # important for cumsum
+  group_by(year) |>
+  mutate(across(c(
+    Legal_AD, Legal_UM, Sublegal_AD, Sublegal_UM
+  ), \(x) cumsum(x)),
+  across(
+    c(Legal_AD, Legal_UM, Sublegal_AD, Sublegal_UM),
+    \(x) x / (Legal_AD + Legal_UM + Sublegal_AD + Sublegal_UM) # convert to running proportions
+  )) |> 
+  ungroup()
+
+
+encounters_re <- tf_daily_proportions_re |>
+  bind_rows(vtr_daily_proportions_re)
+
+```
+
+```{r story_of_recreation}
+estimates_re <- ests_re |>
+  left_join(
+    encounters_re %>%
+      select(survey_datetime, catch_area_code, Legal_AD:Sublegal_UM),
+    by = c('date' = 'survey_datetime', 'area' = 'catch_area_code') # join cumsum test fishing, fill na'
+  ) %>%
+  fill(everything(), .direction = 'down')
+
+
+estimates_fram_re <- estimates_re |>
+  mutate(
+    est_total_encounters = chin_ad_ret / Legal_AD / .87,
+    est_total_sublegal = est_total_encounters * (Sublegal_AD + Sublegal_UM)
+  ) |>
+  select(year,date, area, est_harvest, est_total_encounters, est_total_sublegal) |>
+  left_join(fram_parameters, by = c('area' = 'catch_area_code', 'year' = 'run_year')) |>
+  filter(lubridate::month(date) %in% 8:9)
+```
+
+```{r redo}
+#| label: tbl-fishery-august
+#| tbl-cap: 'Selected fisheries where the start date of the fishery was set to August 1st'
+estimates_fram_re |>
+  filter(
+         !is.infinite(est_total_sublegal),
+         (area == '10' & year %in% c(2017, 2021, 2023)) |
+         (area == '11' & year %in% c(2015, 2017:2019, 2021)),
+         est_total_sublegal <= total_sublegal
+         ) |>
+  group_by(area, year) |>
+  slice_max(date, n=1) |>
+  mutate(
+    total_harvest_percentage = est_harvest / total_harvest,
+    total_sublegal_percentage = est_total_sublegal / total_sublegal
+  ) |>
+  select(year, area, date, total_harvest_percentage, total_sublegal_percentage) |>
+  knitr::kable(
+    col.names = c('Year',
+                           'Area',
+                            'Assumed Closure',
+                           'Percentage of Total Harvest',
+                  'Percentage of Total Subelgals'),
+    digits = 2
+  )
+```
+
+
+
 ## Conclusion
-### Considerations
+## Considerations
+### FRAM Sublegal-to-legal Ratios
+### Corner Cases
 
 
 
