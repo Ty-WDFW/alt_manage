@@ -7,6 +7,7 @@ format:
     code-fold: true
     fig-width: 8
     fig-height: 6
+    embed-resources: true
 editor: source
 ---
 
@@ -133,7 +134,7 @@ Shorter than planned seasons are not unprecedented for Puget Sound Chinook sport
 
 ## Proposal
 
-Due to high catches and coinciding with high observed sub-legal-to-legal ratios early in summer (time-step 3) fisheries, WDFW is proposing publishing different dates than what appear in the the List of Agreed to Fisheries (LOAF). These dates will always be within the LOAF agreed-to dates, and will target the time period of historic greatest angler success - the month of August. WDFW, using its expanded test fishing monitoring program, will then monitor the legal and marked proportion (percentage of keepers encountered) of Chinook from the LOAF agreed-to and open the fishery early to Chinook retention when the observed test fishing legal and marked proportion approaches its Fishery Regulation Assessment Model (FRAM) counterpart.
+Due to high catches and coinciding with high observed sub-legal-to-legal ratios early in summer (time-step 3) fisheries, WDFW is proposing publishing different dates than what appear in the the List of Agreed to Fisheries (LOAF). These dates will always be within the LOAF agreed-to dates and will target the time period of historic greatest angler success - the month of August. WDFW, using its expanded test fishing monitoring program, will then monitor the legal and marked proportion (percentage of keepers encountered) of Chinook from the LOAF agreed-to opening date and open the fishery early to Chinook retention when the observed test fishing legal-marked proportion approaches its Fishery Regulation Assessment Model (FRAM) counterpart.
 
 The goal of this proposal is to reduce sport fishing Chinook releases and their associated mortality, while making Area 10 and Area 11 sport fishing seasons more predictable by reducing variability associated with low legal and marked proportions.
 
@@ -154,7 +155,11 @@ daily_regs |>
   group_by(run_year, area) |>
   summarize(opening_date = min(reg_start_date), .groups = 'drop') |>
   pivot_wider(names_from = area, names_prefix = 'Area_', values_from = opening_date) |>
-  knitr::kable() 
+  knitr::kable(
+        col.names = c('Year',
+                           'Area 10',
+                            'Area 11')
+  ) 
 ```
 
 ```{r run_timing}
@@ -329,7 +334,7 @@ The increase in both angler-trips and efficiency of those angler trips has lead 
 
 Total encounters (@eq-total-encounters), the primitive value of estimated releases and subsequently various management sub-categories is calculated with two variables and a constant. The constant, .87, is the mathematical interpretation of the 13% legal-marked release rate. The first variable, landed AD Chinook, is heavily influenced by factors of effort and efficiency outlined in [Effort and Efficiency](#effort-and-efficiency-of-the-sport-fishers-of-areas-10-and-11-in-the-month-of-july). The second variable, the legal-marked proportion is for the most part, an expression of the sublegal-to-legal ratio outlined in [Sublegal Ratios](#highly-variable-sublegal-to-legal-ratios).
 
-Landed AD catch and the legal-marked proportion have different degrees of influence on a final estimate of total encounters. The legal-marked proportion being a fraction does not scale linearly as the denominator yielding estimates of encounters that exponentially increase as the legal-marked proportion decreases (@fig-non-linear), where landed catch tends to steadily accumulate of othe course of the fishery.
+Landed AD catch and the legal-marked proportion have different degrees of influence on a final estimate of total encounters. The legal-marked proportion being a fraction does not scale linearly as the denominator yielding estimates of encounters that exponentially increase as the legal-marked proportion decreases (@fig-non-linear), where landed catch tends to steadily accumulate over the course of the fishery.
 
 
 $$ 
@@ -502,10 +507,10 @@ encounters |>
 ```{r estimates}
 estimates <- ests_prep |>
   left_join(
-    encounters %>%
+    encounters |>
       select(survey_datetime, catch_area_code, Legal_AD:Sublegal_UM),
     by = c('date' = 'survey_datetime', 'area' = 'catch_area_code') # join cumsum test fishing, fill na'
-  ) %>%
+  ) |>
   fill(everything(), .direction = 'down') # days where testfishing didn't take place roll over
 
 # calculate encounter estimates
@@ -617,13 +622,6 @@ estimates_fram |>
 
 ```
 
-### Identifing Presenence of Sub-legals
-The abundance of sub-legals is notoriously [hard to predict](#highly-variable-sublegal-to-legal-ratios) 
-in Puget Sound sport fisheries. Observing current sub-legal abundance is straight forward and can be
-done in near real-time with the recent expansion of the number of test fishing boats surveying
-Puget Sound. Test fishing data is available for management decisions immediately after the
-survey is completed through electronic data collection.
-
 ### Reimagining Prior Fisheries
 
 Using the graphs above it is possible to identify years with high presence of sub-legal
@@ -634,7 +632,7 @@ For this analysis, years 2017, 2020, and 2023 were chosen for Area 10, and 2015,
 
 ```{r selected_fisheries_final_values}
 #| label: tbl-fishery-final
-#| tbl-cap: 'Fishery dates a quota utilizations where estimated total sublegals initially exceed FRAM predictions'
+#| tbl-cap: 'Fishery dates a quota utilizations where estimated total sublegals initially exceeded FRAM predictions'
 
 estimates_fram |>
   filter(
@@ -668,12 +666,11 @@ estimates_fram |>
 As shown in (@tbl-fishery-final), there is a large difference in quota utilization
 between the total harvest category and the total sub-legal encounter category before
 a fishery is closed. These fisheries would be not only be characterized by their
-short seasons effecting sample sizes of VTR and test fishing encounters and uncertainty
+short seasons effecting sample sizes of VTR and test fishing encounters resulting uncertainty
 of the estimates, but large estimates of sub-legal moralities relative to landed catch.
 
-Creating these fisheries with an August 1st
 
-```{r story_of_recreation_prep, include=F}
+```{r story_of_recreation, include = FALSE}
 # starting these fisheries on august 1st
 
 # prep retention
@@ -734,15 +731,12 @@ vtr_daily_proportions_re <- vtr_daily_counts |>
 encounters_re <- tf_daily_proportions_re |>
   bind_rows(vtr_daily_proportions_re)
 
-```
-
-```{r story_of_recreation}
 estimates_re <- ests_re |>
   left_join(
-    encounters_re %>%
+    encounters_re |>
       select(survey_datetime, catch_area_code, Legal_AD:Sublegal_UM),
     by = c('date' = 'survey_datetime', 'area' = 'catch_area_code') # join cumsum test fishing, fill na'
-  ) %>%
+  ) |>
   fill(everything(), .direction = 'down')
 
 
@@ -758,7 +752,7 @@ estimates_fram_re <- estimates_re |>
 
 ```{r redo}
 #| label: tbl-fishery-august
-#| tbl-cap: 'Selected fisheries where the start date of the fishery was set to August 1st'
+#| tbl-cap: 'Selected fisheries where the start date of the fishery was set to August 1st. Note: The assumed closure date is limited to the original fishery datasets which were managed to criteria other than total sub-legals and various agreed-to closure dates.'
 estimates_fram_re |>
   filter(
          !is.infinite(est_total_sublegal),
@@ -783,13 +777,292 @@ estimates_fram_re |>
   )
 ```
 
+The above table (@tbl-fishery-august) is a creation of the fisheries outlined in (@tbl-fishery-final)
+with a start date of August 1st and end date that was either was observed 
+for that particular fishery (end of dataset), or a retroactively enforced closure when 
+the estimated sub-legals rise above the predicted FRAM value for that fishery.
 
+Taking the mean absolute difference between quota utilization between total harvest
+and total sub-legal encounters for each area and starting date there is a measurable
+effect (@tbl-fishery-effect). With Area 10 benefiting the most with a start date
+of August 1st. 
+
+```{r late_effect}
+#| label: tbl-fishery-effect
+#| tbl-cap: 'Comparison of mean absolute difference between total harvest and total sub-legal encounters quota utilization for the observed start date of the fishery and a start date of August 1st for the same fishery. All fisheries are enforced to close immediately when estimated total sub-legal encounters exceed FRAM predicted sub-legal encounters.'
+summary_re <- estimates_fram_re |>
+  filter(
+         !is.infinite(est_total_sublegal),
+         (area == '10' & year %in% c(2017, 2021, 2023)) |
+         (area == '11' & year %in% c(2015, 2017:2019, 2021)),
+         est_total_sublegal <= total_sublegal
+         ) |>
+  group_by(area, year) |>
+  slice_max(date, n=1) |>
+  mutate(
+    total_harvest_percentage = est_harvest / total_harvest,
+    total_sublegal_percentage = est_total_sublegal / total_sublegal
+  ) |>
+  select(year, area, date, total_harvest_percentage, total_sublegal_percentage) |>
+  mutate(opening_date = 'August')
+
+summary_original <- estimates_fram |>
+  filter(
+         !is.infinite(est_total_sublegal),
+         
+         (area == '10' & year %in% c(2017, 2021, 2023)) |
+         (area == '11' & year %in% c(2015, 2017:2019, 2021)),
+         est_total_sublegal >= total_sublegal
+         ) |>
+  group_by(area, year) |>
+  slice_min(date, n=1) |>
+  bind_rows(estimates_fram |> # 11 2023 never exceeded fram due to in-season management
+              filter(area == '11', year == 2023) |>
+              slice_max(date)
+            ) |>
+  mutate(
+    total_harvest_percentage = est_harvest / total_harvest,
+    total_sublegal_percentage = est_total_sublegal / total_sublegal
+  ) |>
+  select(year, area, date, total_harvest_percentage, total_sublegal_percentage) |>
+  filter(!(area == '11' & year == '2023')) |> # not fair to include
+  mutate(opening_date = 'As Observed')
+
+summary_original |>
+  bind_rows(summary_re) |>
+  mutate(
+    abs_diff = abs(total_sublegal_percentage - total_harvest_percentage)
+  ) |>
+  group_by(area, opening_date) |>
+  summarize(mean_abs_diff = mean(abs_diff), .groups = 'drop') |>
+  pivot_wider(names_from = opening_date, values_from = mean_abs_diff) |>
+  knitr::kable(
+    col.names = c('Area', 'Opening Date as Observered','August 1st Opening Date'),
+    digits = 2
+  )
+
+```
+
+### Identifing Presenence of Sub-legals Chinook Releative to FRAM Predictions
+The abundance of sub-legals is notoriously [difficult to predict](#highly-variable-sublegal-to-legal-ratios) 
+in Puget Sound sport fisheries. However, observing in-season sub-legal abundance is straight forward and can be
+done in near real-time with the recent expansion of the number of test fishing boats surveying
+Puget Sound. Test fishing data is available for management decisions immediately after the
+survey is completed through electronic data collection.
+
+
+Due to its importance in estimating total encounters (@eq-total-encounters), 
+(@fig-non-linear) the legal-marked proportion was used as the metric for evaluating
+the presence of sub-legals in both Area 10 and 11 summer fisheries. To reduce
+variability, a three day lagged (day of, two days before) legal-marked proportion was calculated daily for
+either test fishing or VTRs. 
+
+
+The lagged legal-marked proportion was then compared to the predicted legal-marked
+proportion from FRAM. The intersection of the test fishing or VTR legal-marked proportion
+yields a date where there would be a reasonable expectation of estimated total encounters
+are accumulated at a similar *rate* as the FRAM prediction for the fishery. Given
+that Chinook returning from the ocean tend to be adults and legal-sized and their
+run timing (@fig-run-timing) being later in the fishery, it is unlikely that the
+observed legal-marked proportion will experience a steep decline.
+
+```{r trigger_prep, include = FALSE}
+# fram predicted legal marked proportion
+fram_lm_prop <- fram_enc |>
+  mutate(
+    catch_area_code = recode(fishery_id, `56` = '10', `57` = '11'),
+    year = recode(run_id,
+                      `1` = 2013,
+                      `2` = 2014,
+                      `3` = 2015,
+                      `4` = 2016,
+                      `5` = 2017,
+                      `6` = 2018,
+                      `7` = 2019,
+                      `8` = 2020,
+                      `9` = 2021,
+                      `10` = 2022,
+                      `11` = 2023,
+                      ),
+    across(
+      c('legal_marked', 'sublegal_marked', 
+        'legal_unmarked', 'sublegal_unmarked'), 
+      \(x) x / (legal_marked + sublegal_marked + 
+                legal_unmarked + sublegal_unmarked)) # convert to running proportions
+  ) |>
+  select(year, catch_area_code, legal_marked)
+
+# vtrs
+vtr_roll <- vtr |>
+  filter(catch_area_code == '11',
+         between(lubridate::year(survey_datetime), 2013, 2020),
+         lubridate::month(survey_datetime) %in% 7:9,
+         legal_size_status_description %in% c('Legal', 'Sublegal'),
+         adipose_clip_status_code %in% c('AD', 'UM')
+         ) |>
+  unite('lm', legal_size_status_description, adipose_clip_status_code) |>
+  group_by(survey_datetime, year = lubridate::year(survey_datetime), lm, catch_area_code) |>
+  summarise(count = sum(count), .groups='drop') |>
+  pivot_wider(names_from = lm, values_from=count, values_fill = 0 ) |>
+  group_by(year) |>
+  mutate(
+    lag_LM = reduce(map(0:2, \(x) dplyr::lag(Legal_AD,x, 0)), `+`),
+    lag_LU = reduce(map(0:2, \(x) dplyr::lag(Legal_UM,x, 0)), `+`),
+    lag_SM = reduce(map(0:2, \(x) dplyr::lag(Sublegal_AD,x, 0)), `+`),
+    lag_SU = reduce(map(0:2, \(x) dplyr::lag(Sublegal_UM,x, 0)), `+`),
+    across(starts_with('lag_'), \(x) x / (lag_LM + lag_LU + lag_SM + lag_SU))
+  ) |>
+  select(survey_datetime, year, catch_area_code, lag_LM)
+
+
+# rolling means of test fishing proportions
+tf_roll <- tf_daily_counts |>
+  group_by(year, catch_area_code) |>
+  mutate(
+    lag_LM = reduce(map(0:2, \(x) dplyr::lag(Legal_AD,x, 0)), `+`),
+    lag_LU = reduce(map(0:2, \(x) dplyr::lag(Legal_UM,x, 0)), `+`),
+    lag_SM = reduce(map(0:2, \(x) dplyr::lag(Sublegal_AD,x, 0)), `+`),
+    lag_SU = reduce(map(0:2, \(x) dplyr::lag(Sublegal_UM,x, 0)), `+`),
+    across(starts_with('lag_'), \(x) x / (lag_LM + lag_LU + lag_SM + lag_SU))
+  ) |>
+  select(survey_datetime, year, catch_area_code, lag_LM)
+  
+  
+  
+roll_tide <-  tf_roll |>
+  bind_rows(vtr_roll) |>
+  inner_join(fram_lm_prop) |> #View()
+  pivot_longer(lag_LM:legal_marked)
+
+```
+
+
+```{r lm_compare_10}
+#| label: fig-area-10-lm-fram
+#| fig-cap: 'Legal marked proportion calculated by three test fishing day-trips lagged and summed Chinook legal marked counts relative to FRAM predicted Legal marked proportion (horizontal line)'
+roll_tide |>
+  filter(catch_area_code == '10') |>
+  ggplot(aes(survey_datetime, value, group=name)) +
+  geom_line() +
+  facet_wrap(~year, ncol=3, scales = 'free_x') +
+  labs(
+    subtitle = 'Area 10 Test Fishing 3 Day Lagged Legal Marked Proportion',
+    x = 'Date',
+    y = 'Legal Marked Proportion'
+  ) +
+  scale_y_continuous(labels = scales::percent)
+
+```
+
+```{r lm_compare_11}
+#| label: fig-area-11-lm-fram
+#| fig-cap: 'Legal marked proportion calculated by three day VTR and test fishing lagged and summed Chinook legal marked counts relative to FRAM predicted Legal marked proportion (horizontal line)'
+roll_tide |>
+  filter(catch_area_code == '11') |>
+  ggplot(aes(survey_datetime, value, group=name)) +
+  geom_line() +
+  facet_wrap(~year, ncol=3, scales = 'free_x') +
+  labs(
+    subtitle = 'Area 11 Test Fishing 3 Day Lagged Legal Marked Proportion',
+    x = 'Date',
+    y = 'Legal Marked Proportion'
+  ) +
+  scale_y_continuous(labels = scales::percent)
+
+```
+
+From an in-season context opening from a fishery for retention based on
+a lagged test fishing legal-marked proportion relative to the FRAM predicted
+value can be applied retroactively (@fig-area-10-lm-fram), (@fig-area-11-lm-fram).
+Using the first instance of the observed legal-marked proportion exceeding the
+predicted FRAM value for a opening date.
+
+
+```{r figured_opening_dates}
+#| label: tbl-lm-dictated-start-dates
+#| tbl-cap: 'Start dates of fisheries dictated by first interception between lagged legal-marked proportions and the corresponding FRAM predicted value'
+roll_tide |>
+  pivot_wider() |>
+  filter(lag_LM >= legal_marked) |>
+  group_by(year, catch_area_code) |>
+  slice_min(survey_datetime) |>
+  select(survey_datetime, year, catch_area_code) |>
+  pivot_wider(names_from=catch_area_code, values_from = survey_datetime) |>
+  knitr::kable(
+    col.names = c('Year', 'Area 10', 'Area 11')
+  )
+```
+
+Comparing the start dates dictated by the lagged legal-marked proportion (@tbl-lm-dictated-start-dates)
+to the [selected fisheries that were high in sub-legals](#reimagining-prior-fisheries), there appears
+to be some utility to using the lagged legal-marked proportions compared to their corresponding
+predicted FRAM values. The start dates provided (@tbl-lm-dictated-start-dates) which appear close to
+or within month of August all match selected years where there was a high sub-legal presence in the fishery
+except for Area 11 in 2021.
+
+Focusing on Area 11 in 2021 (@fig-area-11-lm-fram), it appears that a spike in the lagged
+legal-marked proportion early in the fishery yielded a false positive. In recognition of
+this and its potential impacts of opening a fishery when there is a high presence of sub-legals,
+this method could be refined to a more accurate indication of sub-legals.
 
 ## Conclusion
+
+As outlined in the [issue](#issue) section of this document, increased total effort and 
+the density of that effort (@fig-historical-effort-denisty), increasing efficiency
+of the sport fleet (@fig-effectiveness), highly variable sub-legal ratios year-to-year 
+(@fig-sub-legal-ratios), and low legal-marked proportions being observed early
+in the fishery due to the absence of legal-sized fish (@fig-run-timing) are all
+contributing factors to highly variable estimates of total sub-legal encounters relative
+to FRAM predictions.
+
+Using methods to retroactively enforce a total sub-legal encounter quota upon
+past fisheries to measure impact, it appears that this criteria is extremely 
+limiting on years where there is an abundance of sub-legals (@fig-ten-fisheries-total-sublegal),
+(@fig-eleven-fisheries-total-sublegal). These fisheries tend to be very short
+in duration with large sub-legal impacts per retained fish (@tbl-fishery-final), due
+to short length of seasons and their low legal-marked proportions estimates
+produced will have a high associated uncertainty (@fig-uncertantity).
+
+A viable mitigation strategy to this issue seems to be simply delaying
+the fishery to a time-period that has more abundance of legal-marked Chinook
+on high sub-legal years. There seems to be a pronounced effect when this occurs,
+altering the character of the fishery by increasing landed catch relative to total
+sub-legal encounters (@tbl-fishery-august). This should increase the stability and 
+predictability of in-season estimates by way of a higher legal-marked proportion 
+(@fig-non-linear)  and allowing fishery managers to better manage the fishery. Season 
+length and quality will likely improve relative to non-delayed seasons as well as
+a reduction in sub-legal mortalties.
+
+Identifying *when* to delay a season due to the presence of sub-legals appears to 
+be achievable as well. Being selective on what years the season should be delayed
+is important as not all years have high sub-legal abundance, and August 1st openers
+on low sub-legal abundance years will undoubtedly reduce viable opportunity. 
+
+Using a lagged legal-marked proportion from test fishing vessels relative
+to the FRAM predicted value correctly identified a high sub-legal year in eight 
+out of the nine cases. Test fishing data available in near real-time early in 
+the fishery can be used as a mechanism to decided whether a fishery should be 
+delayed or not. A 100% accuracy should be sought when deciding on a mechanism
+to delay a fishery, and there may be improvements to the one presented here.
+
 ## Considerations
 ### FRAM Sublegal-to-legal Ratios
-### Corner Cases
+The expected result of a delayed fishery in a high sub-legal abundance year has
+the potential to change the outcome of that fishery by a large amount 
+(@tbl-fishery-final) versus (@tbl-fishery-august). The resulting test fishing and 
+VTR data of the delayed fisheries will produce lower sublegal-to-legal ratios than
+the same fishery if it wasn't delayed. Caution needs to be exercised as [FRAM uses
+a six year mean](#highly-variable-sublegal-to-legal-ratios) to predict encounters in
+future fisheries, and a feedback loop between estimates a FRAM can be introduced
+that reduces the amount of encounters that FRAM predicts in future fisheries.
 
+### Extremely Robust Fisheries
+Under the management strategy [proposed](#proposal), a corner case can be
+realized that would open and close a fishery before the dates posted in the
+sport pamphlet. If a start date of August 1st is published in the sport pamphlet
+and test fishing indicates that we could open much earlier, a total harvest quota
+can be met before the published August 1st date if there is a high enough
+abundance of keeper Chinook.
 
 
 
